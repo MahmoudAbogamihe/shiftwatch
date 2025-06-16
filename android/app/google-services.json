@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "189993005157",
+    "firebase_url": "https://graduation-project-dbe01-default-rtdb.firebaseio.com",
+    "project_id": "graduation-project-dbe01",
+    "storage_bucket": "graduation-project-dbe01.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:189993005157:android:652bde053eb588bb13568c",
+        "android_client_info": {
+          "package_name": "com.hoka.final_project_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAaKbCpn_4BPJqGtzdUiNm_4zTmdDR-WYI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
