@@ -35,7 +35,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       isLoading = true;
     });
 
-    final dbRef = FirebaseDatabase.instance.ref('$username/employees/$empName');
+    final safeName = empName.replaceAll(' ', '_'); // 👈 تحويل الاسم الآمن
+    final dbRef =
+        FirebaseDatabase.instance.ref('$username/employees/$safeName');
     final snapshot = await dbRef.get();
 
     if (snapshot.exists) {
@@ -61,23 +63,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
         title: const Text('Employee Profile'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.edit),
-            onPressed: () {
-              Navigator.pushNamed(
-                context,
-                EditProfileScreen.screenRoute,
-                arguments: {
-                  'username': username,
-                  'empName': empName,
-                  'info': empData?['info'] ?? {},
-                },
-              ).then((result) {
-                if (result == true) {
-                  fetchEmployeeData(); // Refresh data after editing
-                }
-              });
-            },
-          ),
+              icon: const Icon(Icons.edit),
+              onPressed: () {
+                Navigator.pushNamed(
+                  context,
+                  EditProfileScreen.screenRoute,
+                  arguments: {
+                    'username': username,
+                    'empName': empName,
+                    'info': empData?['info'] ?? {},
+                  },
+                ).then((result) {
+                  if (result != null &&
+                      result is String &&
+                      result.trim().isNotEmpty &&
+                      result != empName) {
+                    final newName = result.trim();
+                    setState(() {
+                      empName = newName;
+                      isLoading = true;
+                    });
+
+                    // تأخير بسيط لضمان مزامنة Firebase
+                    Future.delayed(const Duration(milliseconds: 500), () {
+                      fetchEmployeeData();
+                    });
+                  } else if (result == true) {
+                    fetchEmployeeData();
+                  }
+                });
+              }),
           IconButton(
             icon: CircleAvatar(
               radius: 20,

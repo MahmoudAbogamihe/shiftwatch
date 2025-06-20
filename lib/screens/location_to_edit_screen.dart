@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:final_project_app/screens/edit_profile_screen.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -481,82 +480,79 @@ class _LocationToEditScreenState extends State<LocationToEditScreen> {
             ),
           ),
           Container(
-              height: 200,
-              padding: EdgeInsets.symmetric(vertical: 70, horizontal: 120),
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6C63FF),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 60,
-                    vertical: 15,
-                  ),
+            height: 200,
+            padding: const EdgeInsets.symmetric(vertical: 70, horizontal: 120),
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF6C63FF),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(30),
                 ),
-                onPressed: () async {
-                  final RenderBox renderBox =
-                      _imageKey.currentContext?.findRenderObject() as RenderBox;
-                  final Size displayedSize = renderBox.size;
-
-                  final double displayedImageWidth = displayedSize.width;
-                  final double displayedImageHeight = displayedSize.height;
-
-                  List<List<List<double>>> polygonDimensions =
-                      convertPolygonsToListDouble(
-                    polygons:
-                        _polygons, // تأكد أن _polygons هو List<List<Offset>>
-                    originalImageWidth: _originalImageWidth,
-                    originalImageHeight: _originalImageHeight,
-                    displayedImageWidth: displayedImageWidth,
-                    displayedImageHeight: displayedImageHeight,
-                  );
-
-                  if (_polygons.isEmpty || _polygons.length != maxPolygons) {
-                    _showDrawingConfirmationDialog();
-                    return;
-                  }
-
-                  // تحويل إحداثيات النقاط إلى int
-                  List<List<List<int>>> finalPolygons = polygonDimensions
-                      .map((polygon) => polygon
-                          .map((point) => [point[0].round(), point[1].round()])
-                          .toList())
-                      .toList();
-
-                  Map<String, dynamic> polygonsMap = {};
-                  for (int i = 0; i < finalPolygons.length; i++) {
-                    final polygon = finalPolygons[i];
-                    Map<String, Map<String, int>> pointsMap = {};
-                    for (int j = 0; j < polygon.length; j++) {
-                      pointsMap[j.toString()] = {
-                        '0': polygon[j][0], // x
-                        '1': polygon[j][1], // y
-                      };
-                    }
-                    polygonsMap[i.toString()] = pointsMap;
-                  }
-
-                  print('Polygons as Map: $polygonsMap');
-
-                  // // مثال رفع البيانات إلى Firebase (تعديل المسار حسب حاجتك)
-                  // final ref = FirebaseDatabase.instance.ref('$userName/employees/$empName/info/location');
-                  // await ref.update(polygonsMap);
-
-                  // ثم التنقل أو أي شيء آخر
-                  await Navigator.pushNamed(
-                      context, EditProfileScreen.screenRoute,
-                      arguments: {'polygonDimensions': polygonsMap});
-                },
-                child: const Text(
-                  'ok',
-                  style: TextStyle(
-                    fontSize: 18,
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 60,
+                  vertical: 15,
                 ),
-              )),
+              ),
+              onPressed: () async {
+                final RenderBox renderBox =
+                    _imageKey.currentContext?.findRenderObject() as RenderBox;
+                final Size displayedSize = renderBox.size;
+
+                final double displayedImageWidth = displayedSize.width;
+                final double displayedImageHeight = displayedSize.height;
+
+                List<List<List<double>>> polygonDimensions =
+                    convertPolygonsToListDouble(
+                  polygons:
+                      _polygons, // تأكد أن _polygons هو List<List<Offset>>
+                  originalImageWidth: _originalImageWidth,
+                  originalImageHeight: _originalImageHeight,
+                  displayedImageWidth: displayedImageWidth,
+                  displayedImageHeight: displayedImageHeight,
+                );
+
+                if (_polygons.isEmpty || _polygons.length != maxPolygons) {
+                  _showDrawingConfirmationDialog();
+                  return;
+                }
+
+                // تحويل الإحداثيات إلى int
+                List<List<List<int>>> finalPolygons = polygonDimensions
+                    .map((polygon) => polygon
+                        .map((point) => [point[0].round(), point[1].round()])
+                        .toList())
+                    .toList();
+
+                Map<String, dynamic> polygonsMap = {};
+                for (int i = 0; i < finalPolygons.length; i++) {
+                  final polygon = finalPolygons[i];
+                  Map<String, Map<String, int>> pointsMap = {};
+                  for (int j = 0; j < polygon.length; j++) {
+                    pointsMap[j.toString()] = {
+                      '0': polygon[j][0], // x
+                      '1': polygon[j][1], // y
+                    };
+                  }
+                  polygonsMap[i.toString()] = pointsMap;
+                }
+
+                print('Polygons as Map: $polygonsMap');
+
+                // ترجع الإحداثيات مباشرة للشاشة السابقة (ChooseLocationScreen)
+                Navigator.pop(context, {
+                  'points': polygonsMap['0'],
+                });
+              },
+              child: const Text(
+                'OK',
+                style: TextStyle(
+                  fontSize: 18,
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );

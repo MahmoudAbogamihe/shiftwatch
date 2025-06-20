@@ -173,7 +173,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         Map<String, dynamic>.from(empData?['month'] ?? {}),
                       ),
                       const SizedBox(height: 5),
-                      _buildDayDetails(empData, selectedDay!),
+                      selectedDay != null
+                          ? _buildDayDetails(empData, selectedDay!)
+                          : const Center(child: Text("No day selected")),
                     ],
                   ),
                 ),
@@ -299,22 +301,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     // تحويل الوقت الإجمالي إلى ساعات عشرية
     double calculateTotalWorkedHours(Map<String, dynamic> monthData) {
-      int totalMilliseconds = 0;
+      int totalSeconds = 0;
 
       monthData.forEach((key, dayData) {
         if (dayData != null && dayData.containsKey('total_time')) {
           final time = dayData['total_time'];
-          if (time is List && time.length >= 4) {
+          if (time is List && time.length >= 3) {
             final h = time[0] as int;
             final m = time[1] as int;
             final s = time[2] as int;
-            final ms = time[3] as int;
-            totalMilliseconds += (h * 3600000) + (m * 60000) + (s * 1000) + ms;
+
+            totalSeconds += (h * 3600) + (m * 60) + s;
           }
         }
       });
 
-      return totalMilliseconds / 3600000.0;
+      // تحويل الثواني إلى ساعات (double)
+      return totalSeconds / 3600;
     }
 
     // تنسيق الوقت لعرضه

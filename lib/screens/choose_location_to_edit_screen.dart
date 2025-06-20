@@ -94,7 +94,7 @@ class _ChooseLocationToEditScreenState
                   await _getImageDimensions(location.imagePath);
 
                   if (!mounted) return; // may have been disposed mid-await
-                  Navigator.pushReplacementNamed(
+                  final polygon = await Navigator.pushNamed(
                     context,
                     LocationToEditScreen.screenRoute,
                     arguments: {
@@ -105,7 +105,12 @@ class _ChooseLocationToEditScreenState
                       'empName': employeeName,
                     },
                   );
-                  // no setState(isLoading=false) needed; this widget is gone
+                  setState(() => isLoading = false);
+
+                  if (polygon != null && mounted) {
+                    Navigator.pop(
+                        context, polygon); // رجّع الـ polygon لـ EditEmployee
+                  }
                 },
                 child: Card(
                   margin: const EdgeInsets.all(10),

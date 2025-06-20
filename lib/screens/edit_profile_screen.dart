@@ -1,11 +1,12 @@
 import 'dart:io';
+
+import 'package:final_project_app/screens/choose_location_to_edit_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
 
-// Upload compressed image to Azure (reusable function)
 Future<String?> uploadCompressedImageToAzure({
   required File file,
   required String containerName,
@@ -17,7 +18,6 @@ Future<String?> uploadCompressedImageToAzure({
 
   final safeContainerName =
       containerName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9\-]'), '');
-
   final safeFileName = Uri.encodeComponent(fileName);
 
   final String url =
@@ -46,12 +46,29 @@ Future<String?> uploadCompressedImageToAzure({
       return url.split('?').first;
     } else {
       print('Failed to upload image to Azure: ${response.statusCode}');
-      print('Response body: ${response.body}');
       return null;
     }
   } catch (e) {
     print('Error uploading image to Azure: $e');
     return null;
+  }
+}
+
+Future<bool> deleteImageFromAzure(String imageUrl) async {
+  try {
+    final uri = Uri.parse(imageUrl);
+    final response = await http.delete(uri);
+
+    if (response.statusCode == 202 || response.statusCode == 200) {
+      print('Image deleted successfully from Azure');
+      return true;
+    } else {
+      print('Failed to delete image from Azure: ${response.statusCode}');
+      return false;
+    }
+  } catch (e) {
+    print('Error deleting image from Azure: $e');
+    return false;
   }
 }
 
@@ -67,6 +84,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late String username;
   late String oldEmployeeName;
   late Map<String, dynamic> info;
+
   final _formKey = GlobalKey<FormState>();
   late TextEditingController nameController;
   late TextEditingController phoneController;
@@ -75,113 +93,48 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late TextEditingController hoursController;
   late TextEditingController positionController;
 
+  Map<String, dynamic>? polygonFromDrawing;
   String? photoUrl;
   File? newImageFile;
-
   final ImagePicker picker = ImagePicker();
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is Map<String, dynamic>) {
+      username = args['username'] ?? '';
+      oldEmployeeName = args['empName'] ?? '';
+      info = Map<String, dynamic>.from(args['info'] ?? {});
 
-    final route = ModalRoute.of(context);
-    if (route == null) return;
-
-    final args = route.settings.arguments;
-    if (args == null || args is! Map<String, dynamic>) return;
-
-    final Map<String, dynamic> arguments = args;
-
-    username = arguments['username'] ?? '';
-    oldEmployeeName = arguments['empName'] ?? '';
-    info = Map<String, dynamic>.from(arguments['info'] ?? {});
-
-    nameController = TextEditingController(text: oldEmployeeName);
-    phoneController = TextEditingController(text: info['phone'] ?? '');
-    addressController = TextEditingController(text: info['address'] ?? '');
-    salaryController =
-        TextEditingController(text: info['salary']?.toString() ?? '');
-    hoursController =
-        TextEditingController(text: info['working_hours']?.toString() ?? '');
-    positionController = TextEditingController(text: info['position'] ?? '');
-    photoUrl = info['photo_url'] ?? '';
+      nameController = TextEditingController(text: oldEmployeeName);
+      phoneController = TextEditingController(text: info['phone'] ?? '');
+      addressController = TextEditingController(text: info['address'] ?? '');
+      salaryController =
+          TextEditingController(text: info['salary']?.toString() ?? '');
+      hoursController =
+          TextEditingController(text: info['working_hours']?.toString() ?? '');
+      positionController = TextEditingController(text: info['position'] ?? '');
+      photoUrl = info['photo_url'] ?? '';
+    }
   }
 
   Future<void> pickImage() async {
     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-
     if (pickedFile != null) {
-      setState(() {
-        newImageFile = File(pickedFile.path);
-      });
+      setState(() => newImageFile = File(pickedFile.path));
     }
-  }
-
-  // Upload image to Azure instead of Firebase Storage
-  Future<String?> uploadImageToAzure(
-      File imageFile, String employeeName) async {
-    return await uploadCompressedImageToAzure(
-      file: imageFile,
-      containerName: '$username-images',
-      fileName: '$employeeName.jpg',
-    );
-  }
-
-  Future<void> renameEmployeeIfNeeded(String oldName, String newName) async {
-    if (oldName == newName.trim()) return; // no need to rename
-
-    final dbRef = FirebaseDatabase.instance.ref();
-
-    final oldSnapshot = await dbRef.child("employees/$oldName").get();
-
-    if (!oldSnapshot.exists) {
-      print("Old employee does not exist");
-      return;
-    }
-
-    final oldData = oldSnapshot.value;
-
-    // Create new node with new name and copy old data
-    await dbRef.child("employees/$newName").set(oldData);
-
-    // Remove old node
-    await dbRef.child("employees/$oldName").remove();
-
-    print("Renamed employee from $oldName to $newName");
   }
 
   void updateData() async {
     if (_formKey.currentState!.validate()) {
       final newEmployeeName = nameController.text.trim();
+      final safeName = newEmployeeName.replaceAll(' ', '_');
+      final oldSafeName = oldEmployeeName.replaceAll(' ', '_');
+
       bool nameChanged = newEmployeeName != oldEmployeeName;
       bool imageChanged = newImageFile != null;
 
-      if (nameChanged) {
-        final confirm = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Confirm Name Change'),
-            content: const Text(
-                'Are you sure you want to change the employee name? The data will be copied to the new name, old data will remain.'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Confirm'),
-              ),
-            ],
-          ),
-        );
-
-        if (confirm != true) {
-          return;
-        }
-      }
-
-      // Show loading indicator
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -189,207 +142,258 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       );
 
       try {
-        final oldRef = FirebaseDatabase.instance
-            .ref('$username/employees/$oldEmployeeName');
-        final newRef = FirebaseDatabase.instance
-            .ref('$username/employees/$newEmployeeName');
-
-        if (nameChanged) {
-          final snapshot = await newRef.get();
-          if (snapshot.exists) {
-            Navigator.of(context).pop(); // hide loading
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                    'The new name already exists. Please choose another name.'),
-              ),
-            );
-            return;
-          }
-
-          final oldSnapshot = await oldRef.get();
-          if (oldSnapshot.exists) {
-            await newRef.set(oldSnapshot.value);
-            await oldRef.remove();
-          }
-        }
+        final db = FirebaseDatabase.instance;
+        final oldRef = db.ref('$username/employees/$oldSafeName');
+        final newRef = db.ref('$username/employees/$safeName');
 
         String? updatedPhotoUrl = photoUrl;
 
         if (imageChanged) {
-          final imageName = newEmployeeName;
-          final uploadedUrl =
-              await uploadImageToAzure(newImageFile!, imageName);
-          if (uploadedUrl != null) {
-            updatedPhotoUrl = uploadedUrl;
+          final url = await uploadCompressedImageToAzure(
+            file: newImageFile!,
+            containerName: '$username-images',
+            fileName: '$safeName.jpg',
+          );
+          if (url != null) {
+            updatedPhotoUrl = url;
+            if (photoUrl != null && photoUrl!.isNotEmpty) {
+              await deleteImageFromAzure(photoUrl!);
+            }
           }
-        } else if (nameChanged && photoUrl != null && photoUrl!.isNotEmpty) {
+        }
+
+        if (nameChanged && !imageChanged) {
           try {
             final response = await http.get(Uri.parse(photoUrl!));
             if (response.statusCode == 200) {
               final tempDir = Directory.systemTemp;
-              final tempFile = File('${tempDir.path}/temp.jpg');
+              final tempFile = File('${tempDir.path}/temp_image.jpg');
               await tempFile.writeAsBytes(response.bodyBytes);
 
-              final newUrl =
-                  await uploadImageToAzure(tempFile, newEmployeeName);
-              if (newUrl != null) {
-                updatedPhotoUrl = newUrl;
+              final reuploadUrl = await uploadCompressedImageToAzure(
+                file: tempFile,
+                containerName: '$username-images',
+                fileName: '$safeName.jpg',
+              );
+
+              if (reuploadUrl != null) {
+                updatedPhotoUrl = reuploadUrl;
+                await deleteImageFromAzure(photoUrl!);
               }
             }
           } catch (e) {
-            print('Failed to copy old image to new name: $e');
+            print("❌ Error re-uploading image under new name: $e");
           }
         }
 
-        await newRef.child('info').update({
+        // تجهيز البيانات المحدثة
+        Map<String, dynamic> updatedData = {
           'phone': phoneController.text.trim(),
           'address': addressController.text.trim(),
-          'salary': salaryController.text.trim(),
-          'working_hours': hoursController.text.trim(),
+          'salary': int.tryParse(salaryController.text.trim()) ?? 0,
+          'working_hours': int.tryParse(hoursController.text.trim()) ?? 0,
           'position': positionController.text.trim(),
           'photo_url': updatedPhotoUrl ?? '',
-        });
+        };
+
+        // إعداد location
+        final oldInfoSnapshot = await oldRef.child('info').get();
+        Map<String, dynamic> oldInfo = {};
+        if (oldInfoSnapshot.exists) {
+          oldInfo = Map<String, dynamic>.from(oldInfoSnapshot.value as Map);
+        }
+
+        List? newLocation;
+        if (polygonFromDrawing != null &&
+            polygonFromDrawing!['points'] != null &&
+            (polygonFromDrawing!['points'] as Map).isNotEmpty) {
+          newLocation = (polygonFromDrawing!['points'] as Map<String, dynamic>)
+              .values
+              .map((point) => [point['0'], point['1']])
+              .toList();
+        }
+
+        if (newLocation != null &&
+            newLocation.toString() != (oldInfo['location']?.toString() ?? '')) {
+          updatedData['location'] = newLocation;
+        } else if (oldInfo.containsKey('location')) {
+          updatedData['location'] = oldInfo['location'];
+        }
+
+        // لو الاسم اتغير: احذف القديم وسجل الجديد
+        if (nameChanged) {
+          final exists = (await newRef.get()).exists;
+          if (exists) {
+            Navigator.of(context).pop();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('The new name already exists.')),
+            );
+            return;
+          }
+
+          await oldRef.remove();
+        }
+
+        await newRef.child('info').update(updatedData);
 
         Navigator.of(context).pop(); // hide loading
-        Navigator.pop(context, true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profile updated successfully!')),
+        );
+
+        Navigator.pop(
+            context, newEmployeeName); // 👈 مهم علشان ترجع الاسم الجديد
       } catch (e) {
         Navigator.of(context).pop(); // hide loading
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error updating data: $e')),
+          SnackBar(content: Text('Error: $e')),
         );
       }
     }
   }
 
-  @override
-  void initState() {
-    super.initState();
-    nameController = TextEditingController();
-    // Or initialize with existing value:
-    // nameController = TextEditingController(text: existingName);
-  }
-
-  @override
-  void dispose() {
-    nameController.dispose();
-    phoneController.dispose();
-    addressController.dispose();
-    salaryController.dispose();
-    hoursController.dispose();
-    positionController.dispose();
-    super.dispose();
+  Widget _buildInputCard(
+    String label,
+    IconData icon,
+    TextEditingController controller, {
+    TextInputType inputType = TextInputType.text,
+    String? Function(String?)? validator,
+  }) {
+    return Card(
+      color: Colors.white,
+      elevation: 3,
+      shadowColor: Colors.indigo.withOpacity(0.2),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        child: TextFormField(
+          controller: controller,
+          keyboardType: inputType,
+          validator: validator,
+          decoration: InputDecoration(
+            icon: Icon(icon, color: Colors.indigo),
+            labelText: '$label (editable)',
+            floatingLabelStyle: const TextStyle(color: Colors.indigo),
+            border: InputBorder.none,
+            suffixIcon: const Icon(Icons.edit, size: 16, color: Colors.grey),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final backgroundColor = Colors.grey.shade100;
-
     return Scaffold(
+      backgroundColor: Colors.grey.shade100,
       appBar: AppBar(
-        title: const Text('Edit Employee Profile'),
+        title: const Text('Edit Employee'),
+        backgroundColor: Colors.indigo,
+        foregroundColor: Colors.white,
         centerTitle: true,
       ),
-      backgroundColor: backgroundColor,
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
         child: Form(
           key: _formKey,
-          child: ListView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              GestureDetector(
-                onTap: pickImage,
-                child: CircleAvatar(
-                  radius: 70,
-                  backgroundColor: Colors.grey.shade300,
-                  backgroundImage: newImageFile != null
-                      ? FileImage(newImageFile!)
-                      : (photoUrl != null && photoUrl!.isNotEmpty)
-                          ? NetworkImage(photoUrl!) as ImageProvider
+              Row(
+                children: const [
+                  Icon(Icons.edit_note, color: Colors.indigo, size: 30),
+                  SizedBox(width: 8),
+                  Text(
+                    "You're editing employee info",
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Center(
+                child: Tooltip(
+                  message: "Tap to change employee picture",
+                  child: GestureDetector(
+                    onTap: pickImage,
+                    child: CircleAvatar(
+                      radius: 60,
+                      backgroundColor: Colors.grey.shade300,
+                      backgroundImage: newImageFile != null
+                          ? FileImage(newImageFile!)
+                          : (photoUrl != null && photoUrl!.isNotEmpty)
+                              ? NetworkImage(photoUrl!) as ImageProvider
+                              : null,
+                      child: (newImageFile == null &&
+                              (photoUrl == null || photoUrl!.isEmpty))
+                          ? const Icon(Icons.add_a_photo,
+                              size: 30, color: Colors.grey)
                           : null,
-                  child: (newImageFile == null &&
-                          (photoUrl == null || photoUrl!.isEmpty))
-                      ? const Icon(Icons.add_a_photo,
-                          size: 40, color: Colors.grey)
-                      : null,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 20),
-              TextFormField(
-                controller: nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Name',
-                  border: OutlineInputBorder(),
+              _buildInputCard("Name", Icons.person, nameController,
+                  validator: (v) =>
+                      v == null || v.isEmpty ? 'Enter name' : null),
+              _buildInputCard("Phone", Icons.phone, phoneController,
+                  inputType: TextInputType.phone,
+                  validator: (v) =>
+                      v == null || v.isEmpty ? 'Enter phone' : null),
+              _buildInputCard("Address", Icons.home, addressController),
+              _buildInputCard("Salary", Icons.monetization_on, salaryController,
+                  inputType: TextInputType.number),
+              _buildInputCard(
+                  "Working Hours", Icons.access_time, hoursController,
+                  inputType: TextInputType.number),
+              _buildInputCard("Position", Icons.work, positionController),
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.map),
+                label: const Text("Edit Workspace Location"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.indigo,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
                 ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Please enter the employee name';
+                onPressed: () async {
+                  final selectedPolygon = await Navigator.pushNamed(
+                    context,
+                    ChooseLocationToEditScreen.screenRoute,
+                    arguments: {
+                      'employeeName': nameController.text.trim(),
+                      'userName': username,
+                    },
+                  );
+                  if (selectedPolygon != null && mounted) {
+                    setState(() {
+                      polygonFromDrawing =
+                          selectedPolygon as Map<String, dynamic>;
+                    });
                   }
-                  return null;
                 },
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: phoneController,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(
-                  labelText: 'Phone',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Please enter phone number';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: addressController,
-                decoration: const InputDecoration(
-                  labelText: 'Address',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: salaryController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Salary',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: hoursController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Working Hours',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: positionController,
-                decoration: const InputDecoration(
-                  labelText: 'Position',
-                  border: OutlineInputBorder(),
-                ),
               ),
               const SizedBox(height: 20),
-              ElevatedButton(
+              ElevatedButton.icon(
+                icon: const Icon(Icons.save_alt),
+                label: const Text("Save Changes"),
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(50),
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
                 onPressed: updateData,
-                child: const Text('Save'),
               ),
               const SizedBox(height: 12),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(50),
                   backgroundColor: Colors.redAccent,
                 ),
-                onPressed: () {
-                  Navigator.of(context).pop(false);
-                },
+                onPressed: () => Navigator.of(context).pop(false),
                 child: const Text('Cancel'),
               ),
             ],

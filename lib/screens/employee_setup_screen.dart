@@ -354,7 +354,7 @@ class EmployeeSetupScreenState extends State<EmployeeSetupScreen> {
     Map<String, dynamic> employeeData = {
       'Location': locationNum,
       'workspace': jsonEncode(polygonDimensions[currentIndex]),
-      'name': _nameControllers[currentIndex].text,
+      'name': _nameControllers[currentIndex].text.replaceAll(' ', '_'),
       'position': _positionController[currentIndex].text,
       'salary': _salaryControllers[currentIndex].text,
       'working_hours': _workingHoursControllers[currentIndex].text,
