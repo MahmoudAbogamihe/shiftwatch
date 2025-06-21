@@ -130,6 +130,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (_formKey.currentState!.validate()) {
       final newEmployeeName = nameController.text.trim();
       final safeName = newEmployeeName.replaceAll(' ', '_');
+      final oldEmployeeName = this.oldEmployeeName;
       final oldSafeName = oldEmployeeName.replaceAll(' ', '_');
 
       bool nameChanged = newEmployeeName != oldEmployeeName;
@@ -148,6 +149,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
         String? updatedPhotoUrl = photoUrl;
 
+        // Upload new image if selected
         if (imageChanged) {
           final url = await uploadCompressedImageToAzure(
             file: newImageFile!,
@@ -162,7 +164,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           }
         }
 
-        if (nameChanged && !imageChanged) {
+        // Re-upload image under new name if name changed and no new image selected
+        if (nameChanged &&
+            !imageChanged &&
+            photoUrl != null &&
+            photoUrl!.isNotEmpty) {
           try {
             final response = await http.get(Uri.parse(photoUrl!));
             if (response.statusCode == 200) {
@@ -186,7 +192,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           }
         }
 
-        // تجهيز البيانات المحدثة
+        // ✅ Fetch current 'In Location' from Firebase
+        String currentInLocation = 'Not exist now';
+        try {
+          final currentDataSnapshot =
+              await oldRef.child('info/In Location').get();
+          if (currentDataSnapshot.exists) {
+            currentInLocation = currentDataSnapshot.value.toString();
+          }
+        } catch (e) {
+          print('❌ Error fetching In Location: $e');
+        }
+
+        // Prepare updated data from the form
         Map<String, dynamic> updatedData = {
           'phone': phoneController.text.trim(),
           'address': addressController.text.trim(),
@@ -194,15 +212,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           'working_hours': int.tryParse(hoursController.text.trim()) ?? 0,
           'position': positionController.text.trim(),
           'photo_url': updatedPhotoUrl ?? '',
+          'In Location': currentInLocation,
         };
 
-        // إعداد location
+        // Load old location data (if any)
         final oldInfoSnapshot = await oldRef.child('info').get();
         Map<String, dynamic> oldInfo = {};
         if (oldInfoSnapshot.exists) {
           oldInfo = Map<String, dynamic>.from(oldInfoSnapshot.value as Map);
         }
 
+        // Get updated polygon points if any
         List? newLocation;
         if (polygonFromDrawing != null &&
             polygonFromDrawing!['points'] != null &&
@@ -220,7 +240,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           updatedData['location'] = oldInfo['location'];
         }
 
-        // لو الاسم اتغير: احذف القديم وسجل الجديد
+        // If name changed, check if new name exists, remove old entry
         if (nameChanged) {
           final exists = (await newRef.get()).exists;
           if (exists) {
@@ -230,10 +250,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             );
             return;
           }
-
           await oldRef.remove();
         }
 
+        // Save new data
         await newRef.child('info').update(updatedData);
 
         Navigator.of(context).pop(); // hide loading
@@ -241,8 +261,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           const SnackBar(content: Text('Profile updated successfully!')),
         );
 
-        Navigator.pop(
-            context, newEmployeeName); // 👈 مهم علشان ترجع الاسم الجديد
+        Navigator.pop(context, newEmployeeName); // return new name
       } catch (e) {
         Navigator.of(context).pop(); // hide loading
         ScaffoldMessenger.of(context).showSnackBar(
@@ -333,19 +352,62 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-              _buildInputCard("Name", Icons.person, nameController,
-                  validator: (v) =>
-                      v == null || v.isEmpty ? 'Enter name' : null),
-              _buildInputCard("Phone", Icons.phone, phoneController,
-                  inputType: TextInputType.phone,
-                  validator: (v) =>
-                      v == null || v.isEmpty ? 'Enter phone' : null),
-              _buildInputCard("Address", Icons.home, addressController),
-              _buildInputCard("Salary", Icons.monetization_on, salaryController,
-                  inputType: TextInputType.number),
               _buildInputCard(
-                  "Working Hours", Icons.access_time, hoursController,
-                  inputType: TextInputType.number),
+                "Name",
+                Icons.person,
+                nameController,
+                validator: (v) {
+                  final trimmed = v?.trim() ?? '';
+                  return trimmed.isEmpty ? 'Enter name' : null;
+                },
+              ),
+              _buildInputCard(
+                "Phone",
+                Icons.phone,
+                phoneController,
+                inputType: TextInputType.phone,
+                validator: (v) {
+                  final trimmed = v?.trim() ?? '';
+                  return trimmed.isEmpty ? 'Enter phone' : null;
+                },
+              ),
+              _buildInputCard(
+                "Address",
+                Icons.home,
+                addressController,
+                validator: (v) {
+                  final trimmed = v?.trim() ?? '';
+                  return trimmed.isEmpty ? 'Enter address' : null;
+                },
+              ),
+              _buildInputCard(
+                "Salary",
+                Icons.monetization_on,
+                salaryController,
+                inputType: TextInputType.number,
+                validator: (v) {
+                  final trimmed = v?.trim() ?? '';
+                  if (trimmed.isEmpty) return 'Enter salary';
+                  final value = int.tryParse(trimmed);
+                  if (value == null) return 'Enter a valid number';
+                  if (value <= 0) return 'Salary must be greater than 0';
+                  return null;
+                },
+              ),
+              _buildInputCard(
+                "Working Hours",
+                Icons.access_time,
+                hoursController,
+                inputType: TextInputType.number,
+                validator: (v) {
+                  final trimmed = v?.trim() ?? '';
+                  if (trimmed.isEmpty) return 'Enter working hours';
+                  final value = int.tryParse(trimmed);
+                  if (value == null) return 'Enter a valid number';
+                  if (value <= 0) return 'Hours must be greater than 0';
+                  return null;
+                },
+              ),
               _buildInputCard("Position", Icons.work, positionController),
               const SizedBox(height: 20),
               ElevatedButton.icon(

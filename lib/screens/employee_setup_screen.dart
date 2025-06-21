@@ -37,6 +37,7 @@ class EmployeeSetupScreenState extends State<EmployeeSetupScreen> {
   int currentIndex = 0;
   List<Map<String, dynamic>> allEmployeesData = [];
   Map<String, List<Map<String, dynamic>>> allLocationsData = {};
+  bool isLoading = false;
 
   void _addListenersForCurrentEmployee() {
     for (var controller in [
@@ -123,6 +124,10 @@ class EmployeeSetupScreenState extends State<EmployeeSetupScreen> {
     void Function() saveEmployeeData,
     void Function(String) showWarning,
   ) async {
+    setState(() {
+      isLoading = true;
+    });
+
     saveEmployeeData();
 
     final databaseRef = FirebaseDatabase.instance.ref();
@@ -245,6 +250,8 @@ class EmployeeSetupScreenState extends State<EmployeeSetupScreen> {
         'last_updated': DateTime.now().toIso8601String(),
       });
 
+      await databaseRef.child('$username/setup_done').set(true);
+
       if (context.mounted) {
         Navigator.pushReplacementNamed(context, EmployeeScreen.screenRoute);
       }
@@ -313,7 +320,11 @@ class EmployeeSetupScreenState extends State<EmployeeSetupScreen> {
       }
     } catch (e) {
       print('❌ خطأ أثناء رفع الصورة: $e');
-      return null;
+    }
+    if (context.mounted) {
+      setState(() {
+        isLoading = false;
+      });
     }
   }
 
@@ -653,22 +664,36 @@ class EmployeeSetupScreenState extends State<EmployeeSetupScreen> {
                             child: Padding(
                               padding: const EdgeInsets.only(top: 20.0),
                               child: ElevatedButton(
-                                onPressed: () async {
-                                  await finishSetupRealtime(
-                                    context,
-                                    userName,
-                                    allEmployeesData,
-                                    allLocationsData,
-                                    _saveEmployeeData,
-                                    _showWarning,
-                                  );
-                                },
+                                onPressed:
+                                    isLoading || !_isCurrentEmployeeValid()
+                                        ? null
+                                        : () async {
+                                            await finishSetupRealtime(
+                                              context,
+                                              userName,
+                                              allEmployeesData,
+                                              allLocationsData,
+                                              _saveEmployeeData,
+                                              _showWarning,
+                                            );
+                                          },
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: _isCurrentEmployeeValid()
                                       ? Colors.green
                                       : Colors.grey,
                                 ),
-                                child: const Text("Finish Setup"),
+                                child: isLoading
+                                    ? const SizedBox(
+                                        height: 20,
+                                        width: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2.5,
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                                  Colors.white),
+                                        ),
+                                      )
+                                    : const Text("Finish Setup"),
                               ),
                             ),
                           ),

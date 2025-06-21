@@ -34,7 +34,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
     final email = user.email;
     if (email == null) {
-      // البريد الإلكتروني غير متوفر، ارسل للإعداد
+      // البريد الإلكتروني غير متوفر، نذهب للإعداد
       _navigateTo(SetupScreen.screenRoute);
       return;
     }
@@ -47,13 +47,15 @@ class _SplashScreenState extends State<SplashScreen> {
       return;
     }
 
-    // جلب بيانات الموظفين من الـ Realtime Database
-    final employeesRef = FirebaseDatabase.instance.ref('$userName/employees');
-    final employeesSnapshot = await employeesRef.get();
+    // التأكد من أن المستخدم قام بالإعداد من قبل (setup_done = true)
+    final setupDoneRef = FirebaseDatabase.instance.ref('$userName/setup_done');
+    final setupDoneSnapshot = await setupDoneRef.get();
 
-    if (employeesSnapshot.exists && employeesSnapshot.value != null) {
+    if (setupDoneSnapshot.exists && setupDoneSnapshot.value == true) {
+      // المستخدم أكمل الإعداد، نذهب إلى شاشة الموظفين
       _navigateTo(EmployeeScreen.screenRoute);
     } else {
+      // المستخدم لم يكمل الإعداد
       _navigateTo(SetupScreen.screenRoute);
     }
   }
