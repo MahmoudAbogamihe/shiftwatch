@@ -14,50 +14,63 @@ class ChooseLocationScreen extends StatefulWidget {
 }
 
 class _ChooseLocationScreenState extends State<ChooseLocationScreen> {
-  bool isLoading = false;
+  bool isLoading = false; // فقط متغير واحد للتحميل
 
-  // تخزين الأبعاد الأصلية
   double _imageWidth = 0;
   double _imageHeight = 0;
 
-  // لتخزين البيانات التي نستلمها من الروت
   String userName = '';
   Map<String, dynamic>? allLocationsData;
 
-  bool _isInit = true; // لمنع إعادة التنفيذ في didChangeDependencies
+  bool _isInit = true;
+  List<Location> _locations = [];
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_isInit) {
       final routeArgs = ModalRoute.of(context)?.settings.arguments;
-
       if (routeArgs != null && routeArgs is Map<String, dynamic>) {
         userName = routeArgs['userName'] ?? '';
         allLocationsData = routeArgs['allLocationsData'];
       }
+      _fetchLocations();
       _isInit = false;
     }
   }
 
-  // دالة لتحميل الصورة واستخراج الأبعاد
+  Future<void> _fetchLocations() async {
+    setState(() => isLoading = true);
+    try {
+      final fetched = await fetchLocationsFromAzure();
+      if (!mounted) return;
+      setState(() => _locations = fetched);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('فشل تحميل الصور')),
+      );
+    } finally {
+      if (!mounted) return;
+      setState(() => isLoading = false);
+    }
+  }
+
   Future<void> _getImageDimensions(String imageUrl) async {
     final image = Image.network(imageUrl);
     final completer = Completer<void>();
-
     image.image.resolve(const ImageConfiguration()).addListener(
-      ImageStreamListener(
-        (ImageInfo info, bool _) {
-          setState(() {
-            _imageWidth = info.image.width.toDouble();
-            _imageHeight = info.image.height.toDouble();
-          });
-          completer.complete();
-        },
-      ),
+      ImageStreamListener((ImageInfo info, bool _) {
+        _imageWidth = info.image.width.toDouble();
+        _imageHeight = info.image.height.toDouble();
+        completer.complete();
+      }),
     );
-
     await completer.future;
+  }
+
+  String _extractFileName(String url) {
+    return Uri.parse(url).pathSegments.last;
   }
 
   @override
@@ -71,72 +84,72 @@ class _ChooseLocationScreenState extends State<ChooseLocationScreen> {
             backgroundColor: const Color.fromARGB(255, 211, 211, 243),
             title: const Center(child: Text("Choose Location")),
           ),
-          body: ListView.builder(
-            itemCount: locations.length,
-            itemBuilder: (context, index) {
-              final location = locations[index];
-              return GestureDetector(
-                onTap: () async {
-                  setState(() {
-                    isLoading = true;
-                  });
+          body: isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _locations.isEmpty
+                  ? const Center(child: Text('لا توجد مواقع متاحة'))
+                  : ListView.builder(
+                      itemCount: _locations.length,
+                      itemBuilder: (context, index) {
+                        final location = _locations[index];
+                        return GestureDetector(
+                          onTap: () async {
+                            setState(() => isLoading = true);
 
-                  // تحميل الصورة واستخراج الأبعاد قبل الانتقال
-                  await _getImageDimensions(location.imagePath);
+                            await _getImageDimensions(location.imagePath);
+                            final imageFileName =
+                                _extractFileName(location.imagePath);
 
-                  // Navigate to NumOfLocation with data
-                  Navigator.pushReplacementNamed(
-                    context,
-                    NumOfLocation.screenRoute,
-                    arguments: {
-                      'locationNum': location.name,
-                      'imagePath': location.imagePath,
-                      'imageWidth': _imageWidth,
-                      'imageHeight': _imageHeight,
-                      'allLocationsData': allLocationsData,
-                      'userName': userName,
-                    },
-                  );
+                            if (!mounted) return;
 
-                  setState(() {
-                    isLoading = false;
-                  });
-                },
-                child: Card(
-                  margin: const EdgeInsets.all(10),
-                  child: ListTile(
-                    leading: CachedNetworkImage(
-                      imageUrl: location.imagePath,
-                      placeholder: (context, url) =>
-                          const CircularProgressIndicator(),
-                      errorWidget: (context, url, error) =>
-                          const Icon(Icons.error),
-                      width: 100,
-                      height: 100,
-                      fit: BoxFit.cover,
+                            setState(() => isLoading =
+                                false); // أولاً أوقف التحميل قبل التنقل
+
+// ثم انتقل بعد فاصل زمني بسيط للتأكد أن setState تم تطبيقها
+                            await Future.delayed(Duration(milliseconds: 100));
+
+                            Navigator.pushReplacementNamed(
+                              context,
+                              NumOfLocation.screenRoute,
+                              arguments: {
+                                'locationNum': location.name,
+                                'imagePath': location.imagePath,
+                                'imageFileName': imageFileName,
+                                'imageWidth': _imageWidth,
+                                'imageHeight': _imageHeight,
+                                'allLocationsData': allLocationsData,
+                                'userName': userName,
+                              },
+                            );
+                          },
+                          child: Card(
+                            margin: const EdgeInsets.all(10),
+                            child: ListTile(
+                              leading: CachedNetworkImage(
+                                imageUrl: location.imagePath,
+                                placeholder: (context, url) =>
+                                    const CircularProgressIndicator(),
+                                errorWidget: (context, url, error) =>
+                                    const Icon(Icons.error),
+                                width: 100,
+                                height: 100,
+                                fit: BoxFit.cover,
+                              ),
+                              title: Center(
+                                child: Text(
+                                  location.name,
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
                     ),
-                    title: Center(
-                      child: Text(
-                        location.name,
-                        style: const TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
         ),
-
-        // Full-screen loading overlay
-        if (isLoading)
-          Container(
-            color: Colors.black.withOpacity(0.4),
-            child: const Center(
-              child: CircularProgressIndicator(),
-            ),
-          ),
       ],
     );
   }

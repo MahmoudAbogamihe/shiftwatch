@@ -30,14 +30,53 @@ class _ProfileScreenState extends State<ProfileScreen> {
     fetchEmployeeData();
   }
 
+  Future<void> refreshAfterEdit(String newName) async {
+    setState(() {
+      empName = newName;
+      isLoading = true;
+    });
+
+    final dbRef = FirebaseDatabase.instance.ref('$username/employees/$newName');
+
+    print("📦 Trying to load from path: $username/employees/$newName");
+
+    bool found = false;
+    int retryCount = 0;
+
+    while (!found && retryCount < 10) {
+      final snapshot = await dbRef.get();
+      if (snapshot.exists) {
+        setState(() {
+          empData = Map<String, dynamic>.from(snapshot.value as Map);
+          isLoading = false;
+        });
+        print("📡 Snapshot.exists = ${snapshot.exists}");
+        print("📡 Snapshot.value = ${snapshot.value}");
+
+        found = true;
+      } else {
+        retryCount++;
+        await Future.delayed(const Duration(milliseconds: 300)); // ⏳ استنى شوية
+      }
+    }
+
+    if (!found) {
+      setState(() {
+        empData = null;
+        isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Employee data not found.")),
+      );
+    }
+  }
+
   void fetchEmployeeData() async {
     setState(() {
       isLoading = true;
     });
 
-    final safeName = empName.replaceAll(' ', '_'); // 👈 تحويل الاسم الآمن
-    final dbRef =
-        FirebaseDatabase.instance.ref('$username/employees/$safeName');
+    final dbRef = FirebaseDatabase.instance.ref('$username/employees/$empName');
     final snapshot = await dbRef.get();
 
     if (snapshot.exists) {
@@ -63,36 +102,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
         title: const Text('Employee Profile'),
         actions: [
           IconButton(
-              icon: const Icon(Icons.edit),
-              onPressed: () {
-                Navigator.pushNamed(
-                  context,
-                  EditProfileScreen.screenRoute,
-                  arguments: {
-                    'username': username,
-                    'empName': empName,
-                    'info': empData?['info'] ?? {},
-                  },
-                ).then((result) {
-                  if (result != null &&
-                      result is String &&
-                      result.trim().isNotEmpty &&
-                      result != empName) {
-                    final newName = result.trim();
-                    setState(() {
-                      empName = newName;
-                      isLoading = true;
-                    });
+            icon: const Icon(Icons.edit),
+            onPressed: () async {
+              final result = await Navigator.pushNamed(
+                context,
+                EditProfileScreen.screenRoute,
+                arguments: {
+                  'username': username,
+                  'empName': empName,
+                  'info': empData?['info'] ?? {},
+                },
+              );
 
-                    // تأخير بسيط لضمان مزامنة Firebase
-                    Future.delayed(const Duration(milliseconds: 500), () {
-                      fetchEmployeeData();
-                    });
-                  } else if (result == true) {
-                    fetchEmployeeData();
-                  }
-                });
-              }),
+              if (result != null && result is Map<String, dynamic>) {
+                final newName = result['newName']?.toString() ?? empName;
+                empName = newName;
+                await refreshAfterEdit(newName);
+                print("🔁 Returned from Edit with name: $newName");
+              }
+            },
+          ),
           IconButton(
             icon: CircleAvatar(
               radius: 20,
@@ -181,7 +210,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _buildInfoCard(
             Icons.badge, "Position", info['position']?.toString() ?? "N/A"),
         _buildInfoCard(Icons.location_on, "In Location",
-            info['In Location']?.toString() ?? "N/A"),
+            info['loccam']?.toString() ?? "N/A"),
       ],
     );
   }

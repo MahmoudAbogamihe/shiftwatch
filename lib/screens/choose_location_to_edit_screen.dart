@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-
 import '../models/locations.dart';
 import 'location_to_edit_screen.dart';
 
@@ -17,7 +16,8 @@ class ChooseLocationToEditScreen extends StatefulWidget {
 
 class _ChooseLocationToEditScreenState
     extends State<ChooseLocationToEditScreen> {
-  bool isLoading = false;
+  bool isFetchingLocations = false;
+  bool isLoadingOnTap = false;
 
   double _imageWidth = 0;
   double _imageHeight = 0;
@@ -26,8 +26,8 @@ class _ChooseLocationToEditScreenState
   late String employeeName = '';
 
   bool _isInit = true;
+  List<Location> _locations = [];
 
-  ///  --- image-stream bookkeeping to clean up in dispose() ---
   ImageStream? _stream;
   ImageStreamListener? _listener;
 
@@ -40,31 +40,44 @@ class _ChooseLocationToEditScreenState
         userName = args['userName'] ?? '';
         employeeName = args['employeeName'] ?? '';
       }
+      _loadLocations();
       _isInit = false;
+    }
+  }
+
+  Future<void> _loadLocations() async {
+    setState(() => isFetchingLocations = true);
+    try {
+      final fetched = await fetchLocationsFromAzure();
+      if (!mounted) return;
+      setState(() => _locations = fetched);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('فشل تحميل الصور من Azure')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => isFetchingLocations = false);
     }
   }
 
   Future<void> _getImageDimensions(String imageUrl) async {
     final provider = CachedNetworkImageProvider(imageUrl);
-
     final completer = Completer<void>();
     _stream = provider.resolve(const ImageConfiguration());
     _listener = ImageStreamListener((info, _) {
-      if (!mounted) return; // <- protect setState
-      setState(() {
-        _imageWidth = info.image.width.toDouble();
-        _imageHeight = info.image.height.toDouble();
-      });
+      if (!mounted) return;
+      _imageWidth = info.image.width.toDouble();
+      _imageHeight = info.image.height.toDouble();
       completer.complete();
     });
     _stream!.addListener(_listener!);
-
     await completer.future;
   }
 
   @override
   void dispose() {
-    // remove listener to avoid leaks / late callbacks
     if (_stream != null && _listener != null) {
       _stream!.removeListener(_listener!);
     }
@@ -82,61 +95,81 @@ class _ChooseLocationToEditScreenState
             backgroundColor: const Color.fromARGB(255, 211, 211, 243),
             title: const Center(child: Text("Choose Location")),
           ),
-          body: ListView.builder(
-            itemCount: locations.length,
-            itemBuilder: (context, index) {
-              final location = locations[index];
-              return GestureDetector(
-                onTap: () async {
-                  if (!mounted) return;
-                  setState(() => isLoading = true);
+          body: isFetchingLocations
+              ? const Center(child: CircularProgressIndicator())
+              : _locations.isEmpty
+                  ? const Center(child: Text("لا توجد مواقع حالياً"))
+                  : ListView.builder(
+                      itemCount: _locations.length,
+                      itemBuilder: (context, index) {
+                        final location = _locations[index];
+                        return GestureDetector(
+                          onTap: () async {
+                            if (!mounted) return;
+                            setState(() => isLoadingOnTap = true);
 
-                  await _getImageDimensions(location.imagePath);
+                            await _getImageDimensions(location.imagePath);
 
-                  if (!mounted) return; // may have been disposed mid-await
-                  final polygon = await Navigator.pushNamed(
-                    context,
-                    LocationToEditScreen.screenRoute,
-                    arguments: {
-                      'imagePath': location.imagePath,
-                      'imageWidth': _imageWidth,
-                      'imageHeight': _imageHeight,
-                      'userName': userName,
-                      'empName': employeeName,
-                    },
-                  );
-                  setState(() => isLoading = false);
+                            if (!mounted) return;
+                            final result = await Navigator.pushNamed(
+                              context,
+                              LocationToEditScreen.screenRoute,
+                              arguments: {
+                                'imagePath': location.imagePath,
+                                'loccam': location.name,
+                                'imageWidth': _imageWidth,
+                                'imageHeight': _imageHeight,
+                                'userName': userName,
+                                'empName': employeeName,
+                              },
+                            );
 
-                  if (polygon != null && mounted) {
-                    Navigator.pop(
-                        context, polygon); // رجّع الـ polygon لـ EditEmployee
-                  }
-                },
-                child: Card(
-                  margin: const EdgeInsets.all(10),
-                  child: ListTile(
-                    leading: CachedNetworkImage(
-                      imageUrl: location.imagePath,
-                      placeholder: (_, __) => const CircularProgressIndicator(),
-                      errorWidget: (_, __, ___) => const Icon(Icons.error),
-                      width: 100,
-                      height: 100,
-                      fit: BoxFit.cover,
+                            if (!mounted) return;
+                            if (result != null &&
+                                result is Map<String, dynamic>) {
+                              final points =
+                                  result['points']; // إحداثيات المضلع
+                              final loccam = result['loccam']; // اسم الموقع
+
+                              Navigator.pop(context, {
+                                'points': points,
+                                'loccam': loccam,
+                              });
+                            } else {
+                              setState(() => isLoadingOnTap = false);
+                            }
+
+                            print('hi your ${location.name}');
+                          },
+                          child: Card(
+                            margin: const EdgeInsets.all(10),
+                            child: ListTile(
+                              leading: CachedNetworkImage(
+                                imageUrl: location.imagePath,
+                                placeholder: (_, __) =>
+                                    const CircularProgressIndicator(),
+                                errorWidget: (_, __, ___) =>
+                                    const Icon(Icons.error),
+                                width: 100,
+                                height: 100,
+                                fit: BoxFit.cover,
+                              ),
+                              title: Center(
+                                child: Text(
+                                  location.name,
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
                     ),
-                    title: Center(
-                      child: Text(
-                        location.name,
-                        style: const TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
         ),
-        if (isLoading)
+        if (isLoadingOnTap)
           Container(
             color: Colors.black.withOpacity(0.4),
             alignment: Alignment.center,

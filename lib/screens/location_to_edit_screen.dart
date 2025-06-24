@@ -26,6 +26,7 @@ class _LocationToEditScreenState extends State<LocationToEditScreen> {
   int maxPolygons = 1;
   late String empName = '';
   late String imagePath = '';
+  late String loccam = '';
   late String userName = '';
   // ignore: prefer_typing_uninitialized_variables
   var allLocationsData;
@@ -95,6 +96,11 @@ class _LocationToEditScreenState extends State<LocationToEditScreen> {
         if (args.containsKey('imagePath')) {
           setState(() {
             imagePath = args['imagePath'] as String;
+          });
+        }
+        if (args.containsKey('loccam')) {
+          setState(() {
+            loccam = args['loccam'] as String;
           });
         }
         if (args.containsKey('userName')) {
@@ -541,6 +547,7 @@ class _LocationToEditScreenState extends State<LocationToEditScreen> {
                 // ترجع الإحداثيات مباشرة للشاشة السابقة (ChooseLocationScreen)
                 Navigator.pop(context, {
                   'points': polygonsMap['0'],
+                  'loccam': loccam,
                 });
               },
               child: const Text(

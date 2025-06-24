@@ -93,6 +93,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late TextEditingController hoursController;
   late TextEditingController positionController;
 
+  bool isSaving = false;
+  bool locationSelected = false;
+
   Map<String, dynamic>? polygonFromDrawing;
   String? photoUrl;
   File? newImageFile;
@@ -129,32 +132,57 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   void updateData() async {
     if (_formKey.currentState!.validate()) {
       final newEmployeeName = nameController.text.trim();
-      final safeName = newEmployeeName.replaceAll(' ', '_');
       final oldEmployeeName = this.oldEmployeeName;
-      final oldSafeName = oldEmployeeName.replaceAll(' ', '_');
+
+      if (newEmployeeName.contains(RegExp(r'[.$#[\]/]'))) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content:
+                Text('اسم الموظف لا يمكن أن يحتوي على الرموز: . \$ # [ ] /'),
+          ),
+        );
+        return;
+      }
 
       bool nameChanged = newEmployeeName != oldEmployeeName;
       bool imageChanged = newImageFile != null;
 
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => const Center(child: CircularProgressIndicator()),
-      );
+      bool otherDataChanged = phoneController.text.trim() != info['phone'] ||
+          addressController.text.trim() != info['address'] ||
+          positionController.text.trim() != info['position'] ||
+          int.tryParse(salaryController.text.trim()) != info['salary'] ||
+          int.tryParse(hoursController.text.trim()) != info['working_hours'];
+
+      if (!nameChanged &&
+          !imageChanged &&
+          !otherDataChanged &&
+          polygonFromDrawing == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('لم يتم تعديل أي بيانات.')),
+        );
+        return;
+      }
+
+      setState(() => isSaving = true); // ✅ بدل showDialog
 
       try {
         final db = FirebaseDatabase.instance;
-        final oldRef = db.ref('$username/employees/$oldSafeName');
-        final newRef = db.ref('$username/employees/$safeName');
+        final oldRef = db.ref('$username/employees/$oldEmployeeName');
+        final newRef = db.ref('$username/employees/$newEmployeeName');
+
+        final oldInfoSnapshot = await oldRef.child('info').get();
+        Map<String, dynamic> oldInfo = {};
+        if (oldInfoSnapshot.exists) {
+          oldInfo = Map<String, dynamic>.from(oldInfoSnapshot.value as Map);
+        }
 
         String? updatedPhotoUrl = photoUrl;
 
-        // Upload new image if selected
         if (imageChanged) {
           final url = await uploadCompressedImageToAzure(
             file: newImageFile!,
             containerName: '$username-images',
-            fileName: '$safeName.jpg',
+            fileName: '$newEmployeeName.jpg',
           );
           if (url != null) {
             updatedPhotoUrl = url;
@@ -164,7 +192,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           }
         }
 
-        // Re-upload image under new name if name changed and no new image selected
         if (nameChanged &&
             !imageChanged &&
             photoUrl != null &&
@@ -179,7 +206,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               final reuploadUrl = await uploadCompressedImageToAzure(
                 file: tempFile,
                 containerName: '$username-images',
-                fileName: '$safeName.jpg',
+                fileName: '$newEmployeeName.jpg',
               );
 
               if (reuploadUrl != null) {
@@ -192,19 +219,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           }
         }
 
-        // ✅ Fetch current 'In Location' from Firebase
         String currentInLocation = 'Not exist now';
         try {
-          final currentDataSnapshot =
-              await oldRef.child('info/In Location').get();
-          if (currentDataSnapshot.exists) {
-            currentInLocation = currentDataSnapshot.value.toString();
+          final inLocationSnap = await oldRef.child('info/In Location').get();
+          if (inLocationSnap.exists) {
+            currentInLocation = inLocationSnap.value.toString();
           }
         } catch (e) {
           print('❌ Error fetching In Location: $e');
         }
 
-        // Prepare updated data from the form
         Map<String, dynamic> updatedData = {
           'phone': phoneController.text.trim(),
           'address': addressController.text.trim(),
@@ -215,58 +239,72 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           'In Location': currentInLocation,
         };
 
-        // Load old location data (if any)
-        final oldInfoSnapshot = await oldRef.child('info').get();
-        Map<String, dynamic> oldInfo = {};
-        if (oldInfoSnapshot.exists) {
-          oldInfo = Map<String, dynamic>.from(oldInfoSnapshot.value as Map);
-        }
-
-        // Get updated polygon points if any
-        List? newLocation;
+        List<List<int>>? newLocation;
         if (polygonFromDrawing != null &&
             polygonFromDrawing!['points'] != null &&
-            (polygonFromDrawing!['points'] as Map).isNotEmpty) {
-          newLocation = (polygonFromDrawing!['points'] as Map<String, dynamic>)
-              .values
-              .map((point) => [point['0'], point['1']])
-              .toList();
+            polygonFromDrawing!['points'] is Map) {
+          final pointsMap =
+              polygonFromDrawing!['points'] as Map<String, dynamic>;
+          if (pointsMap.isNotEmpty) {
+            newLocation = pointsMap.values
+                .map((point) => [point['0'] as int, point['1'] as int])
+                .toList();
+          }
         }
 
-        if (newLocation != null &&
-            newLocation.toString() != (oldInfo['location']?.toString() ?? '')) {
+        if (polygonFromDrawing != null &&
+            polygonFromDrawing!['loccam'] != null) {
+          updatedData['loccam'] = polygonFromDrawing!['loccam'];
+        } else if (oldInfo['loccam'] != null) {
+          updatedData['loccam'] = oldInfo['loccam'];
+        }
+
+        if (newLocation != null) {
           updatedData['location'] = newLocation;
         } else if (oldInfo.containsKey('location')) {
           updatedData['location'] = oldInfo['location'];
         }
 
-        // If name changed, check if new name exists, remove old entry
         if (nameChanged) {
           final exists = (await newRef.get()).exists;
           if (exists) {
-            Navigator.of(context).pop();
+            setState(() => isSaving = false); // ✅
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('The new name already exists.')),
+              const SnackBar(content: Text('الاسم الجديد موجود بالفعل.')),
             );
             return;
           }
-          await oldRef.remove();
+
+          final oldSnapshot = await oldRef.get();
+          if (oldSnapshot.exists) {
+            await newRef.set(
+                oldSnapshot.value); // ✅ نسخ كامل (info + month + أي شيء آخر)
+            await oldRef.remove();
+            await Future.delayed(const Duration(milliseconds: 100));
+            // ✅ بعد النسخ فقط احذف القديم
+          }
         }
 
-        // Save new data
         await newRef.child('info').update(updatedData);
+        print('✅ تم تحديث البيانات في Firebase');
 
-        Navigator.of(context).pop(); // hide loading
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile updated successfully!')),
-        );
+        await Future.delayed(Duration(seconds: 1)); // ⭐ أضف دي هنا
 
-        Navigator.pop(context, newEmployeeName); // return new name
+        setState(() => isSaving = false); // ✅ إخفاء التحميل
+
+        print(
+            "✅ Returning from EditProfileScreen with newName: $newEmployeeName");
+
+        Navigator.pop(context, {
+          'newName': newEmployeeName,
+          'newInfo': updatedData,
+        });
       } catch (e) {
-        Navigator.of(context).pop(); // hide loading
+        setState(() => isSaving = false); // ✅
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(content: Text('حدث خطأ أثناء التحديث: $e')),
         );
+        print('❌ Error updating data: $e');
       }
     }
   }
@@ -318,17 +356,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: const [
-                  Icon(Icons.edit_note, color: Colors.indigo, size: 30),
-                  SizedBox(width: 8),
-                  Text(
-                    "You're editing employee info",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
               Center(
                 child: Tooltip(
                   message: "Tap to change employee picture",
@@ -411,52 +438,72 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               _buildInputCard("Position", Icons.work, positionController),
               const SizedBox(height: 20),
               ElevatedButton.icon(
-                icon: const Icon(Icons.map),
-                label: const Text("Edit Workspace Location"),
+                icon: Icon(
+                  locationSelected ? Icons.check_circle : Icons.map,
+                  color: Colors.white,
+                ),
+                label: Text(
+                  locationSelected
+                      ? "Workspace Selected"
+                      : "Edit Workspace Location",
+                ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.indigo,
+                  backgroundColor:
+                      locationSelected ? Colors.teal : Colors.indigo,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
-                onPressed: () async {
-                  final selectedPolygon = await Navigator.pushNamed(
-                    context,
-                    ChooseLocationToEditScreen.screenRoute,
-                    arguments: {
-                      'employeeName': nameController.text.trim(),
-                      'userName': username,
-                    },
-                  );
-                  if (selectedPolygon != null && mounted) {
-                    setState(() {
-                      polygonFromDrawing =
-                          selectedPolygon as Map<String, dynamic>;
-                    });
-                  }
-                },
+                onPressed: isSaving
+                    ? null
+                    : () async {
+                        final selectedPolygon = await Navigator.pushNamed(
+                          context,
+                          ChooseLocationToEditScreen.screenRoute,
+                          arguments: {
+                            'employeeName': nameController.text.trim(),
+                            'userName': username,
+                          },
+                        );
+                        if (selectedPolygon != null && mounted) {
+                          setState(() {
+                            polygonFromDrawing =
+                                selectedPolygon as Map<String, dynamic>;
+                            locationSelected = true;
+                          });
+                        }
+                      },
               ),
               const SizedBox(height: 20),
-              ElevatedButton.icon(
-                icon: const Icon(Icons.save_alt),
-                label: const Text("Save Changes"),
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(50),
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                ),
-                onPressed: updateData,
-              ),
-              const SizedBox(height: 12),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(50),
-                  backgroundColor: Colors.redAccent,
-                ),
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Cancel'),
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.save_alt),
+                    label: const Text("Save Changes"),
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(50),
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: isSaving ? null : updateData,
+                  ),
+                  if (isSaving)
+                    Positioned.fill(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.5),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Center(
+                          child: CircularProgressIndicator(color: Colors.white),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ],
           ),

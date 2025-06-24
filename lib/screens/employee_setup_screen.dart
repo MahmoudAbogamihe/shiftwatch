@@ -134,11 +134,10 @@ class EmployeeSetupScreenState extends State<EmployeeSetupScreen> {
     List<String> skippedEmployees = [];
     List<Future<void>> uploadTasks = [];
 
-    // Helper
     String trimStr(dynamic val) => (val ?? '').toString().trim();
 
     for (var emp in employeesDataaa) {
-      uploadTasks.add(() async {
+      uploadTasks.add(Future(() async {
         final String name = trimStr(emp['name']);
         final String phone = trimStr(emp['phone']);
         final String address = trimStr(emp['address']);
@@ -164,7 +163,6 @@ class EmployeeSetupScreenState extends State<EmployeeSetupScreen> {
         final empRef = databaseRef.child('$username/employees/$name');
         final empSnapshot = await empRef.get();
 
-        // اسم الموظف موجود بالفعل
         if (empSnapshot.exists) {
           final shouldUpdate = await showDialog<bool>(
             context: context,
@@ -191,7 +189,6 @@ class EmployeeSetupScreenState extends State<EmployeeSetupScreen> {
           }
         }
 
-        // رفع الصورة
         final imageUrl = await uploadCompressedImageToAzure(
           file: image,
           containerName: '$username-images',
@@ -204,12 +201,12 @@ class EmployeeSetupScreenState extends State<EmployeeSetupScreen> {
           return;
         }
 
-        // تحليل إحداثيات المكان
         List<List<int>> location;
         try {
           final workspaceString = emp['workspace'] ?? '';
-          if (workspaceString.isEmpty) {
-            showWarning("بيانات الموقع فارغة للموظف: $name");
+          if (workspaceString.isEmpty ||
+              !workspaceString.trim().startsWith('[')) {
+            showWarning("بيانات الموقع غير صالحة للموظف: $name");
             skippedEmployees.add(name);
             return;
           }
@@ -225,8 +222,8 @@ class EmployeeSetupScreenState extends State<EmployeeSetupScreen> {
           return;
         }
 
-        // تحديث بيانات الموظف
         await empRef.child('info').update({
+          'loccam': locationNum,
           'phone': phone,
           'position': position,
           'address': address,
@@ -236,10 +233,9 @@ class EmployeeSetupScreenState extends State<EmployeeSetupScreen> {
           'photo_url': imageUrl,
           'In Location': 'Not exist now',
         });
-      }());
+      }));
     }
 
-    // انتظر انتهاء كل العمليات
     await Future.wait(uploadTasks);
 
     try {
@@ -254,16 +250,25 @@ class EmployeeSetupScreenState extends State<EmployeeSetupScreen> {
 
       if (context.mounted) {
         Navigator.pushReplacementNamed(context, EmployeeScreen.screenRoute);
+        setState(() {
+          isLoading = false;
+        });
       }
 
       print('✅ تم رفع البيانات بنجاح');
 
       if (skippedEmployees.isNotEmpty) {
         print('⚠️ تم تخطي الموظفين التاليين: ${skippedEmployees.join(', ')}');
+        showWarning('تم تخطي بعض الموظفين بسبب مشاكل في البيانات.');
       }
     } catch (error) {
       print('❌ خطأ في رفع البيانات إلى Firebase: $error');
       showWarning('فشل في رفع البيانات، حاول مرة أخرى.');
+      if (context.mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
     }
   }
 
@@ -278,26 +283,22 @@ class EmployeeSetupScreenState extends State<EmployeeSetupScreen> {
     final String sasToken =
         'sv=2024-11-04&ss=bfqt&srt=co&sp=rwdlacupiytfx&se=2027-02-16T22:26:06Z&st=2025-05-09T13:26:06Z&spr=https,http&sig=H%2BJaeH5Yu2EBBoblfSEfn%2BHWHZCPRza1XzAdhKZYCzE%3D';
 
-    // تنظيف اسم الكونتينر: أحرف صغيرة فقط وأرقام وشرطة
     final safeContainerName =
         containerName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9\-]'), '');
-
-    // ترميز اسم الملف لتجنب الأحرف الغير مسموح بها في الرابط
     final safeFileName = Uri.encodeComponent(fileName);
 
     final String url =
         'https://$accountName.blob.core.windows.net/$safeContainerName/$safeFileName?$sasToken';
 
-    print('Uploading to URL: $url'); // تحقق من الرابط النهائي
+    print('Uploading to URL: $url');
 
     try {
       final imageBytes = await file.readAsBytes();
       final decoded = img.decodeImage(imageBytes);
       if (decoded == null) return null;
 
-      final resized = img.copyResize(decoded, width: 512); // تقليل الحجم
-      final compressedBytes =
-          img.encodeJpg(resized, quality: 60); // تقليل الجودة
+      final resized = img.copyResize(decoded, width: 512);
+      final compressedBytes = img.encodeJpg(resized, quality: 60);
 
       final response = await http.put(
         Uri.parse(url),
@@ -320,11 +321,7 @@ class EmployeeSetupScreenState extends State<EmployeeSetupScreen> {
       }
     } catch (e) {
       print('❌ خطأ أثناء رفع الصورة: $e');
-    }
-    if (context.mounted) {
-      setState(() {
-        isLoading = false;
-      });
+      return null;
     }
   }
 

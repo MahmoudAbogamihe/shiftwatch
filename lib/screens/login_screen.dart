@@ -46,6 +46,19 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  Future<bool> checkIfSetupExists(String userName) async {
+    final dbRef = FirebaseDatabase.instance.ref();
+    final snapshot = await dbRef.child(userName).child('employees').get();
+
+    if (snapshot.exists && snapshot.value != null) {
+      print("✅ Found employees data: ${snapshot.value}");
+      return true;
+    } else {
+      print("❌ No employees data found for $userName");
+      return false;
+    }
+  }
+
   Future<void> _login() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
@@ -91,9 +104,12 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       }
 
-      // هنا جلب حالة الإعداد
+      // التحقق من وجود الإعداد من قاعدة البيانات
+      final isSetupComplete = await checkIfSetupExists(userName!);
+
+      // حفظه في SharedPreferences (اختياري)
       final prefs = await SharedPreferences.getInstance();
-      final isSetupComplete = prefs.getBool('isSetupComplete') ?? false;
+      await prefs.setBool('isSetupComplete', isSetupComplete);
 
       if (isSetupComplete) {
         Navigator.pushReplacementNamed(context, EmployeeScreen.screenRoute);
@@ -122,6 +138,8 @@ class _LoginScreenState extends State<LoginScreen> {
         showSpinner = false;
       });
       print('❌ Error: $e');
+    } finally {
+      setState(() => showSpinner = false);
     }
   }
 
@@ -152,7 +170,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           style: TextStyle(
                             fontSize: 36,
                             fontWeight: FontWeight.bold,
-                            color: Colors.white, // make sure text is visible
+                            color: Colors.white,
                             shadows: [
                               Shadow(blurRadius: 5, color: Colors.black54)
                             ],
