@@ -1,8 +1,8 @@
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:final_project_app/screens/choose_location_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'choose_location_screen.dart';
 import 'location_screen.dart';
 
 class NumOfLocation extends StatefulWidget {

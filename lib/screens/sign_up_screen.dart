@@ -1,9 +1,10 @@
-import 'package:final_project_app/screens/setupScreen.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'login_screen.dart';
 import 'package:modal_progress_hud_nsn/modal_progress_hud_nsn.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+
+import 'setupScreen.dart';
 
 class SignUpScreen extends StatefulWidget {
   static const String screenRoute = 'sign_up_screen';

@@ -1,8 +1,9 @@
-import 'package:final_project_app/screens/choose_location_screen.dart';
-import 'package:final_project_app/user_panel/user_panel_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
+import '../user_panel/user_panel_screen.dart';
+import 'choose_location_screen.dart';
 
 class SetupScreen extends StatefulWidget {
   static String screenRoute = 'setup_screen'; // snake_case

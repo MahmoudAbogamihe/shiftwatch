@@ -1,8 +1,8 @@
-import 'package:final_project_app/screens/login_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 
+import '../screens/login_screen.dart';
 import 'setting_screen.dart';
 
 class UserPanelScreen extends StatelessWidget {

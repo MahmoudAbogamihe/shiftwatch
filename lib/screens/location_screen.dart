@@ -2,9 +2,10 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:final_project_app/screens/employee_setup_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+
+import 'employee_setup_screen.dart';
 
 class LocationScreen extends StatefulWidget {
   static String screenRoute = 'location_screen';

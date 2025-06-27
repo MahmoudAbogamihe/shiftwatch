@@ -1,10 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="final_project_app"
+        android:label="TrackShift"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
-            android:name=".MainActivity"
+            android:name="com.hoka.work_tracking.MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity=""

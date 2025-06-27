@@ -1,6 +1,4 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:final_project_app/screens/notification_screen.dart';
-import 'package:final_project_app/screens/profile_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
@@ -9,6 +7,8 @@ import 'package:http/http.dart' as http;
 import '../user_panel/user_panel_screen.dart';
 import 'choose_location_screen.dart';
 import 'dashboard_screen.dart';
+import 'notification_screen.dart';
+import 'profile_screen.dart';
 
 class EmployeeScreen extends StatefulWidget {
   static const String screenRoute = 'employee_screen';

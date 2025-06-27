@@ -1,11 +1,11 @@
 import 'dart:io';
-
-import 'package:final_project_app/screens/choose_location_to_edit_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
+
+import 'choose_location_to_edit_screen.dart';
 
 Future<String?> uploadCompressedImageToAzure({
   required File file,

@@ -1,4 +1,4 @@
-name: final_project_app
+name: work_tracking
 description: "A new Flutter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
@@ -56,6 +56,7 @@ dependencies:
   shared_preferences: ^2.5.3
   firebase_app_check: ^0.3.2+6
   permission_handler: ^12.0.0+1
+  rename: ^3.1.0
 
 dev_dependencies:
   flutter_test:
@@ -66,20 +67,20 @@ dev_dependencies:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "images/play_store_512.png"
+  image_path: "images/GP_Logo.png"
   min_sdk_android: 21 # android min sdk min:16, default 21
   web:
     generate: true
-    image_path: "images/play_store_512.png"
-    background_color: "#hexcode"
-    theme_color: "#hexcode"
+    image_path: "images/GP_Logo.png"
+    background_color: "#ffffff"
+    theme_color: "#4CAF50"
   windows:
     generate: true
-    image_path: "images/play_store_512.png"
+    image_path: "images/GP_Logo.png"
     icon_size: 48 # min:48, max:256, default: 48
   macos:
     generate: true
-    image_path: "images/play_store_512.png"
+    image_path: "images/GP_Logo.png"
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
