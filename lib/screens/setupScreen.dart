@@ -166,8 +166,7 @@ class _SetupScreenState extends State<SetupScreen> {
                       width: MediaQuery.of(context).size.width * 0.5,
                       decoration: BoxDecoration(
                         image: const DecorationImage(
-                          image: AssetImage(
-                              'images/Screenshot 2025-03-06 231250.png'),
+                          image: AssetImage('images/GP_Logo+BG.png'),
                           fit: BoxFit.cover,
                         ),
                         shape: BoxShape.circle,

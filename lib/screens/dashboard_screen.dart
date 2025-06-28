@@ -907,7 +907,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (attemptData is Map && attemptData.containsKey('start')) {
         final location = 'Attendant $attemptNum';
         final start = attemptData['start'] ?? 'N/A';
-        final durationData = attemptData['Office of Abdelrhman'];
+
+        String? officeKey;
+
+        attemptData.forEach((k, v) {
+          if (k != 'start' && k.toLowerCase().contains('office')) {
+            officeKey = k;
+          }
+        });
+
+// لو لقينا المفتاح:
+        final durationData = officeKey != null ? attemptData[officeKey] : null;
+
         final formattedTime = _formatWorkedTime(durationData);
 
         attemptWidgets.add(
