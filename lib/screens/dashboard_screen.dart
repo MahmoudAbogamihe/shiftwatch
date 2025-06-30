@@ -47,11 +47,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() {
         empData = Map<String, dynamic>.from(snapshot.value as Map);
         isLoading = false;
-        // Optionally select first day if available
+
         if (empData != null && empData!['month'] != null) {
           final monthMap = Map<String, dynamic>.from(empData!['month']);
           final days = monthMap.keys.toList()..sort();
-          if (days.isNotEmpty) selectedDay = days.first;
+
+          if (days.isNotEmpty) {
+            selectedDay = days.last; // آخر يوم
+            selectedMonth = selectedDay!.split('-').first; // الشهر بتاعه
+          }
         }
       });
     } else {
@@ -250,7 +254,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
               selected: selectedMonth == monthStr,
               onSelected: (_) {
                 setState(() {
-                  selectedMonth = monthStr; // still "06", for filtering logic
+                  selectedMonth = monthStr;
+
+                  final monthDays = data.keys
+                      .where((dayKey) => dayKey.startsWith(monthStr))
+                      .toList()
+                    ..sort();
+
+                  if (monthDays.isNotEmpty) {
+                    selectedDay = monthDays.first;
+                  } else {
+                    selectedDay = null;
+                  }
                 });
               },
             ),
@@ -271,6 +286,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     final monthData = Map<String, dynamic>.from(data['month']);
+
+    // فلترة البيانات حسب الشهر المختار
+    final filteredMonthData = monthData.entries
+        .where((entry) =>
+            selectedMonth == null || entry.key.startsWith(selectedMonth!))
+        .fold<Map<String, dynamic>>({}, (map, entry) {
+      map[entry.key] = entry.value;
+      return map;
+    });
 
     // دالة لجلب المرتب وساعات العمل اليومية من Firebase
     Future<Map<String, dynamic>> getEmployeeWorkData({
@@ -413,13 +437,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
           workingDaysInMonth: workingDaysInMonth,
         );
 
-        final totalHoursDecimal = calculateTotalWorkedHours(monthData);
+        final totalHoursDecimal = calculateTotalWorkedHours(filteredMonthData);
         final formattedHours = formatTotalHours(totalHoursDecimal);
         final expectedSalary =
             calculateExpectedSalary(totalHoursDecimal, hourlyRate);
-        final workingDays = calculateWorkingDays(monthData);
+        final workingDays = calculateWorkingDays(filteredMonthData);
 
-        final forbiddenAttempts = calculateForbiddenAttempts(monthData);
+        final forbiddenAttempts = calculateForbiddenAttempts(filteredMonthData);
 
         final overview = {
           "Working Days": workingDays.toString(),
@@ -478,13 +502,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildDaysBar(Map<String, dynamic> monthData) {
-    List<String> days = monthData.keys.toList()..sort();
+    // فلترة الأيام على حسب الشهر المختار
+    final filteredDays = monthData.keys.where((day) {
+      final monthPart = day.split('-').first; // "05" من "05-12"
+      return selectedMonth == null || selectedMonth == monthPart;
+    }).toList()
+      ..sort();
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
       child: Row(
-        children: days.map((day) {
+        children: filteredDays.map((day) {
           final dayOnly = int.parse(day.split('-').last).toString();
           final isSelected = selectedDay == day;
 
@@ -540,7 +569,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final List<BarChartGroupData> barGroups = [];
     final List<String> dayLabels = [];
 
-    final sortedKeys = monthData.keys.toList()
+    // فلترة حسب الشهر المحدد
+    final filteredKeys = monthData.keys.where((day) {
+      final monthPart = day.split('-').first;
+      return selectedMonth == null || selectedMonth == monthPart;
+    }).toList()
       ..sort((a, b) {
         final dayA = int.tryParse(a.split('-').last) ?? 0;
         final dayB = int.tryParse(b.split('-').last) ?? 0;
@@ -549,7 +582,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     int index = 0;
 
-    for (var dayKey in sortedKeys) {
+    for (var dayKey in filteredKeys) {
       final dayData = monthData[dayKey];
       double hours = 0;
 
@@ -586,7 +619,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: BarChart(
         BarChartData(
           alignment: BarChartAlignment.spaceAround,
-          maxY: 12, // أقصى عدد ساعات عمل باليوم (يمكنك تغييره حسب الحاجة)
+          maxY: 12,
           barGroups: barGroups,
           titlesData: FlTitlesData(
             leftTitles: AxisTitles(
