@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:http/http.dart' as http;
 
+import '../models/app_notification.dart';
 import '../user_panel/user_panel_screen.dart';
 import 'choose_location_screen.dart';
 import 'dashboard_screen.dart';
@@ -12,7 +13,7 @@ import 'profile_screen.dart';
 
 class EmployeeScreen extends StatefulWidget {
   static const String screenRoute = 'employee_screen';
-  final List<String> allNotes;
+  final List<AppNotification> allNotes;
   const EmployeeScreen({super.key, required this.allNotes});
 
   @override
